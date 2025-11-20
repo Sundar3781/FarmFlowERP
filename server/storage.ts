@@ -41,6 +41,8 @@ import type {
   InsertJournalLine,
   PettyCash,
   InsertPettyCash,
+  Expense,
+  InsertExpense,
   AuditLog,
   InsertAuditLog,
   Wage,
@@ -157,6 +159,10 @@ export interface IStorage {
   getAllPettyCash(): Promise<PettyCash[]>;
   createPettyCash(entry: InsertPettyCash): Promise<PettyCash>;
 
+  // Expenses
+  getAllExpenses(): Promise<Expense[]>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+
   // Audit Logs
   getAuditLogs(userId?: string, module?: string): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
@@ -211,6 +217,7 @@ export class MemStorage implements IStorage {
   private journalEntries: Map<string, JournalEntry>;
   private journalLines: Map<string, JournalLine>;
   private pettyCash: Map<string, PettyCash>;
+  private expenses: Map<string, Expense>;
   private auditLogs: Map<string, AuditLog>;
   private wages: Map<string, Wage>;
   private adminSettings: Map<string, AdminSetting>;
@@ -237,6 +244,7 @@ export class MemStorage implements IStorage {
     this.journalEntries = new Map();
     this.journalLines = new Map();
     this.pettyCash = new Map();
+    this.expenses = new Map();
     this.auditLogs = new Map();
     this.wages = new Map();
     this.adminSettings = new Map();
@@ -779,6 +787,19 @@ export class MemStorage implements IStorage {
     const entry: PettyCash = { ...insertEntry, id, createdAt: new Date() };
     this.pettyCash.set(id, entry);
     return entry;
+  }
+
+  // ========== EXPENSES ==========
+
+  async getAllExpenses(): Promise<Expense[]> {
+    return Array.from(this.expenses.values());
+  }
+
+  async createExpense(insertExpense: InsertExpense): Promise<Expense> {
+    const id = randomUUID();
+    const expense: Expense = { ...insertExpense, id, createdAt: new Date() };
+    this.expenses.set(id, expense);
+    return expense;
   }
 
   // ========== AUDIT LOGS ==========

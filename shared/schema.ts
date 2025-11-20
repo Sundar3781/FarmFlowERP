@@ -399,6 +399,21 @@ export const insertPettyCashSchema = createInsertSchema(pettyCash).omit({ id: tr
 export type InsertPettyCash = z.infer<typeof insertPettyCashSchema>;
 export type PettyCash = typeof pettyCash.$inferSelect;
 
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(),
+  category: text("category").notNull(), // Labour, Equipment, Seeds, Fertilizer, Fuel, Maintenance, Other
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: text("payment_method").notNull(), // Cash, Bank Transfer, UPI, Cheque, Credit Card
+  description: text("description").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
 // ============================================================================
 // AUDIT TRAIL & SYSTEM
 // ============================================================================

@@ -57,6 +57,7 @@ export default function InventoryPage() {
       unit: "",
       location: "",
       unitPrice: "0",
+      supplier: "",
       lastRestocked: new Date().toISOString().split('T')[0],
     },
   });
@@ -161,74 +162,176 @@ export default function InventoryPage() {
                 Add Item
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Add Inventory Item</DialogTitle>
                 <DialogDescription>
                   Register a new item in inventory
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="item-name">Item Name</Label>
-                  <Input id="item-name" placeholder="e.g., NPK Fertilizer" data-testid="input-item-name" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Select>
-                      <SelectTrigger id="category" data-testid="select-category">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fertilizer">Fertilizer</SelectItem>
-                        <SelectItem value="pesticide">Pesticide</SelectItem>
-                        <SelectItem value="seeds">Seeds</SelectItem>
-                        <SelectItem value="equipment">Equipment</SelectItem>
-                        <SelectItem value="fuel">Fuel</SelectItem>
-                        <SelectItem value="tools">Tools</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit((data) => createInventoryMutation.mutate(data))} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Item Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., NPK Fertilizer" data-testid="input-item-name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-category">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Fertilizer">Fertilizer</SelectItem>
+                              <SelectItem value="Pesticide">Pesticide</SelectItem>
+                              <SelectItem value="Seeds">Seeds</SelectItem>
+                              <SelectItem value="Equipment">Equipment</SelectItem>
+                              <SelectItem value="Fuel">Fuel</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="unit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unit</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-unit">
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                              <SelectItem value="liters">Liters</SelectItem>
+                              <SelectItem value="pieces">Pieces</SelectItem>
+                              <SelectItem value="bags">Bags</SelectItem>
+                              <SelectItem value="meters">Meters</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit">Unit</Label>
-                    <Select>
-                      <SelectTrigger id="unit" data-testid="select-unit">
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="kg">Kilograms (kg)</SelectItem>
-                        <SelectItem value="liters">Liters</SelectItem>
-                        <SelectItem value="pieces">Pieces</SelectItem>
-                        <SelectItem value="bags">Bags</SelectItem>
-                        <SelectItem value="meters">Meters</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="currentStock"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Current Quantity</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="0" data-testid="input-current-stock" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="reorderLevel"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Min Stock (Reorder Level)</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="100" data-testid="input-reorder-level" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reorder-level">Reorder Level</Label>
-                    <Input id="reorder-level" type="number" placeholder="100" data-testid="input-reorder-level" />
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="unitPrice"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unit Price (₹)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="45.00" data-testid="input-unit-price" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="supplier"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Supplier</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., ABC Suppliers" data-testid="input-supplier" {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit-price">Unit Price (₹)</Label>
-                    <Input id="unit-price" type="number" step="0.01" placeholder="45.00" data-testid="input-unit-price" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="location">Storage Location</Label>
-                  <Input id="location" placeholder="Warehouse A" data-testid="input-location" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setAddItemDialogOpen(false)} data-testid="button-cancel">
-                  Cancel
-                </Button>
-                <Button onClick={() => setAddItemDialogOpen(false)} data-testid="button-submit-item">
-                  Add Item
-                </Button>
-              </DialogFooter>
+                  
+                  <FormField
+                    control={form.control}
+                    name="location"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Storage Location</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Warehouse A" data-testid="input-location" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <DialogFooter>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setAddItemDialogOpen(false)} 
+                      data-testid="button-cancel"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={createInventoryMutation.isPending}
+                      data-testid="button-submit-item"
+                    >
+                      {createInventoryMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Add Item
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
           <Button variant="outline" data-testid="button-export-inventory">

@@ -24,6 +24,7 @@ import {
   insertJournalEntrySchema,
   insertJournalLineSchema,
   insertPettyCashSchema,
+  insertExpenseSchema,
   insertAuditLogSchema,
   insertWageSchema,
   insertAdminSettingSchema,
@@ -813,6 +814,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(account);
     } catch (error) {
       res.status(500).json({ error: "Failed to update account" });
+    }
+  });
+
+  // ============================================================================
+  // EXPENSES
+  // ============================================================================
+
+  app.get("/api/expenses", async (req, res) => {
+    try {
+      const expenses = await storage.getAllExpenses();
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  app.post("/api/expenses", async (req, res) => {
+    try {
+      const expenseData = insertExpenseSchema.parse(req.body);
+      const expense = await storage.createExpense(expenseData);
+      res.status(201).json(expense);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create expense" });
     }
   });
 
