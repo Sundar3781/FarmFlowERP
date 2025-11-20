@@ -152,15 +152,21 @@ export default function AttendancePage() {
     const recordedEmployees = uniqueUserIds.size;
     const absent = total - recordedEmployees;
     
-    const totalWorkHours = attendanceRecords.reduce((sum, a) => sum + (a.workHours || 0), 0);
-    const workingCount = attendanceRecords.filter(a => a.workHours && a.workHours > 0).length;
+    const totalWorkHours = attendanceRecords.reduce((sum, a) => {
+      const hours = typeof a.workHours === 'number' ? a.workHours : parseFloat(String(a.workHours || 0));
+      return sum + (isNaN(hours) ? 0 : hours);
+    }, 0);
+    const workingCount = attendanceRecords.filter(a => {
+      const hours = typeof a.workHours === 'number' ? a.workHours : parseFloat(String(a.workHours || 0));
+      return !isNaN(hours) && hours > 0;
+    }).length;
     const avgHours = workingCount > 0 ? totalWorkHours / workingCount : 0;
 
     return {
       total,
       present: present + late,
       absent: Math.max(0, absent),
-      avgHours: Math.round(avgHours * 100) / 100,
+      avgHours: isNaN(avgHours) ? 0 : Math.round(avgHours * 100) / 100,
       attendanceRate: total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : 0,
     };
   }, [employeeUsers, attendanceRecords]);
@@ -426,7 +432,11 @@ export default function AttendancePage() {
                               {record.checkOut ? record.checkOut.substring(0, 5) : "-"}
                             </TableCell>
                             <TableCell className="font-mono font-semibold">
-                              {record.workHours?.toFixed(2) || "-"}
+                              {record.workHours != null && typeof record.workHours === 'number' 
+                                ? record.workHours.toFixed(2) 
+                                : record.workHours != null && !isNaN(Number(record.workHours))
+                                ? Number(record.workHours).toFixed(2)
+                                : "-"}
                             </TableCell>
                             <TableCell>
                               {record.checkIn && !record.checkOut && (
@@ -435,7 +445,7 @@ export default function AttendancePage() {
                                   variant="outline"
                                   onClick={() => updateCheckoutMutation.mutate(record.id)}
                                   disabled={updateCheckoutMutation.isPending}
-                                  data-testid={`button-checkout-${record.userId}`}
+                                  data-testid={`button-checkout-${record.id}`}
                                 >
                                   Check-Out
                                 </Button>
