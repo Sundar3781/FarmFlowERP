@@ -60,6 +60,52 @@ export const insertWorkScheduleSchema = createInsertSchema(workSchedules).omit({
 export type InsertWorkSchedule = z.infer<typeof insertWorkScheduleSchema>;
 export type WorkSchedule = typeof workSchedules.$inferSelect;
 
+export const biometricAttendance = pgTable("biometric_attendance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  attendanceId: varchar("attendance_id").notNull(), // Links to attendance_records
+  photoUrl: text("photo_url"), // Simulated facial capture photo
+  fingerprintData: text("fingerprint_data"), // Simulated fingerprint scan
+  captureMethod: text("capture_method").notNull(), // Photo, Fingerprint, Both
+  confidence: decimal("confidence", { precision: 5, scale: 2 }), // Match confidence percentage
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertBiometricAttendanceSchema = createInsertSchema(biometricAttendance).omit({ id: true, createdAt: true });
+export type InsertBiometricAttendance = z.infer<typeof insertBiometricAttendanceSchema>;
+export type BiometricAttendance = typeof biometricAttendance.$inferSelect;
+
+export const wages = pgTable("wages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  month: text("month").notNull(), // YYYY-MM format
+  basicWage: decimal("basic_wage", { precision: 10, scale: 2 }).notNull(),
+  overtime: decimal("overtime", { precision: 10, scale: 2 }).default(sql`0`),
+  deductions: decimal("deductions", { precision: 10, scale: 2 }).default(sql`0`),
+  bonus: decimal("bonus", { precision: 10, scale: 2 }).default(sql`0`),
+  totalPaid: decimal("total_paid", { precision: 10, scale: 2 }).notNull(),
+  paymentDate: text("payment_date"),
+  paymentMethod: text("payment_method"), // Cash, Bank Transfer, UPI, Cheque
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertWageSchema = createInsertSchema(wages).omit({ id: true, createdAt: true });
+export type InsertWage = z.infer<typeof insertWageSchema>;
+export type Wage = typeof wages.$inferSelect;
+
+export const adminSettings = pgTable("admin_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: text("setting_key").notNull().unique(),
+  settingValue: jsonb("setting_value").notNull(),
+  category: text("category").notNull(), // Attendance, Wages, General, Notifications
+  description: text("description"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertAdminSettingSchema = createInsertSchema(adminSettings).omit({ id: true, updatedAt: true });
+export type InsertAdminSetting = z.infer<typeof insertAdminSettingSchema>;
+export type AdminSetting = typeof adminSettings.$inferSelect;
+
 // ============================================================================
 // CULTIVATION & FERTILIZER MANAGEMENT
 // ============================================================================
