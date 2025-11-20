@@ -43,6 +43,8 @@ import type {
   InsertJournalLine,
   PettyCash,
   InsertPettyCash,
+  Expense,
+  InsertExpense,
   AuditLog,
   InsertAuditLog,
 } from "@shared/schema";
@@ -67,6 +69,7 @@ import {
   journalEntries,
   journalLines,
   pettyCash,
+  expenses,
   auditLogs,
 } from "@shared/schema";
 import type { IStorage } from "./storage";
@@ -578,6 +581,17 @@ export class DatabaseStorage implements IStorage {
   async createPettyCash(insertEntry: InsertPettyCash): Promise<PettyCash> {
     const [entry] = await db.insert(pettyCash).values(insertEntry).returning();
     return entry;
+  }
+
+  // ========== EXPENSES ==========
+
+  async getAllExpenses(): Promise<Expense[]> {
+    return await db.select().from(expenses);
+  }
+
+  async createExpense(insertExpense: InsertExpense): Promise<Expense> {
+    const [expense] = await db.insert(expenses).values(insertExpense).returning();
+    return expense;
   }
 
   // ========== AUDIT LOGS ==========

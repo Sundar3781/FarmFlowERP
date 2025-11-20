@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DollarSign, Plus, FileText, TrendingUp, TrendingDown, Download } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
+import { useAuth } from "@/lib/auth-context";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +40,7 @@ import { insertExpenseSchema } from "@shared/schema";
 export default function FinancePage() {
   const { t } = useLanguage();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [addJournalDialogOpen, setAddJournalDialogOpen] = useState(false);
   const [addPettyCashDialogOpen, setAddPettyCashDialogOpen] = useState(false);
   const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
@@ -51,19 +53,23 @@ export default function FinancePage() {
     queryKey: ["/api/expenses"],
   });
 
-  const expenseForm = useForm<InsertExpense>({
-    resolver: zodResolver(insertExpenseSchema),
+  const expenseForm = useForm<Omit<InsertExpense, "createdBy">>({
+    resolver: zodResolver(insertExpenseSchema.omit({ createdBy: true })),
     defaultValues: {
       date: format(new Date(), "yyyy-MM-dd"),
-      paymentMethod: "",
-      category: "",
-      amount: "",
+      paymentMethod: "Cash",
+      category: "Fertilizer",
+      amount: "0",
       description: "",
     },
   });
 
   const createExpenseMutation = useMutation({
-    mutationFn: (data: InsertExpense) => apiRequest("/api/expenses", "POST", data),
+    mutationFn: async (data: Omit<InsertExpense, "createdBy">) => {
+      if (!user) throw new Error("User not authenticated");
+      console.log("Submitting expense:", { ...data, createdBy: user.id });
+      return apiRequest("/api/expenses", "POST", { ...data, createdBy: user.id });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       toast({
@@ -73,10 +79,11 @@ export default function FinancePage() {
       setAddExpenseDialogOpen(false);
       expenseForm.reset();
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error("Expense creation error:", error);
       toast({
         title: "Error",
-        description: "Failed to record expense",
+        description: error?.message || "Failed to record expense",
         variant: "destructive",
       });
     },
