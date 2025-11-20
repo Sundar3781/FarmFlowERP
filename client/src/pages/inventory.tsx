@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,81 +24,67 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Plus, AlertTriangle, TrendingDown, TrendingUp, Download, ArrowUpDown } from "lucide-react";
+import { Package, Plus, AlertTriangle, TrendingDown, TrendingUp, Download, ArrowUpDown, Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { InventoryItem, InsertInventoryItem } from "@shared/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertInventoryItemSchema } from "@shared/schema";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 export default function InventoryPage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("all");
 
-  const { data: inventory, isLoading } = useQuery({
+  // Queries
+  const { data: inventory = [], isLoading: inventoryLoading, error: inventoryError } = useQuery<InventoryItem[]>({
     queryKey: ["/api/inventory"],
   });
 
-  const mockInventory = [
-    { 
-      id: "1", 
-      name: "NPK Fertilizer (10-26-26)", 
-      category: "Fertilizer", 
-      currentStock: 25, 
-      reorderLevel: 100, 
-      unit: "kg",
-      location: "Warehouse A",
-      unitPrice: 45,
-      lastRestocked: "2024-11-10",
-      status: "critical"
+  // Form for creating new inventory item
+  const form = useForm<InsertInventoryItem>({
+    resolver: zodResolver(insertInventoryItemSchema),
+    defaultValues: {
+      name: "",
+      category: "",
+      currentStock: "0",
+      reorderLevel: "0",
+      unit: "",
+      location: "",
+      unitPrice: "0",
+      lastRestocked: new Date().toISOString().split('T')[0],
     },
-    { 
-      id: "2", 
-      name: "Pesticide - Chlorpyrifos", 
-      category: "Pesticide", 
-      currentStock: 8, 
-      reorderLevel: 20, 
-      unit: "liters",
-      location: "Storage Room B",
-      unitPrice: 850,
-      lastRestocked: "2024-11-05",
-      status: "low"
+  });
+
+  // Mutation for creating inventory item
+  const createInventoryMutation = useMutation({
+    mutationFn: async (data: InsertInventoryItem) => {
+      const res = await apiRequest("POST", "/api/inventory", data);
+      return res.json();
     },
-    { 
-      id: "3", 
-      name: "Drip Irrigation Pipes", 
-      category: "Equipment", 
-      currentStock: 450, 
-      reorderLevel: 200, 
-      unit: "meters",
-      location: "Warehouse A",
-      unitPrice: 25,
-      lastRestocked: "2024-10-20",
-      status: "adequate"
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"], exact: false });
+      toast({
+        title: "Success",
+        description: "Inventory item created successfully",
+      });
+      setAddItemDialogOpen(false);
+      form.reset();
     },
-    { 
-      id: "4", 
-      name: "Banana Seeds - Grand Naine", 
-      category: "Seeds", 
-      currentStock: 2400, 
-      reorderLevel: 500, 
-      unit: "pieces",
-      location: "Cold Storage",
-      unitPrice: 12,
-      lastRestocked: "2024-11-15",
-      status: "adequate"
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create inventory item",
+        variant: "destructive",
+      });
     },
-    { 
-      id: "5", 
-      name: "Diesel Fuel", 
-      category: "Fuel", 
-      currentStock: 380, 
-      reorderLevel: 500, 
-      unit: "liters",
-      location: "Fuel Tank",
-      unitPrice: 95,
-      lastRestocked: "2024-11-16",
-      status: "low"
-    },
-  ];
+  });
 
   const getStockStatus = (current: number, reorder: number) => {
     const percentage = (current / reorder) * 100;
@@ -120,12 +106,41 @@ export default function InventoryPage() {
     return Math.min((current / reorder) * 100, 100);
   };
 
-  const categories = ["all", "Fertilizer", "Pesticide", "Equipment", "Seeds", "Fuel"];
-  const filteredInventory = selectedCategory === "all" 
-    ? mockInventory 
-    : mockInventory.filter(item => item.category === selectedCategory);
+  // Calculate inventory with status
+  const inventoryWithStatus = useMemo(() => {
+    return inventory.map(item => {
+      const currentStock = parseFloat(String(item.currentStock || 0));
+      const reorderLevel = parseFloat(String(item.reorderLevel || 0));
+      const status = getStockStatus(currentStock, reorderLevel);
+      return {
+        ...item,
+        currentStock,
+        reorderLevel,
+        unitPrice: parseFloat(String(item.unitPrice || 0)),
+        status,
+      };
+    });
+  }, [inventory]);
 
-  const lowStockCount = mockInventory.filter(item => item.status === "critical" || item.status === "low").length;
+  const categories = ["all", "Fertilizer", "Pesticide", "Equipment", "Seeds", "Fuel", "Other"];
+  const filteredInventory = selectedCategory === "all" 
+    ? inventoryWithStatus
+    : inventoryWithStatus.filter(item => item.category === selectedCategory);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const totalItems = inventoryWithStatus.length;
+    const criticalItems = inventoryWithStatus.filter(i => i.status === "critical").length;
+    const lowStockItems = inventoryWithStatus.filter(i => i.status === "low").length;
+    const totalValue = inventoryWithStatus.reduce((sum, i) => sum + (i.currentStock * i.unitPrice), 0);
+    
+    return {
+      totalItems,
+      criticalItems,
+      lowStockItems,
+      totalValue,
+    };
+  }, [inventoryWithStatus]);
 
   return (
     <div className="p-6 space-y-6" data-testid="page-inventory">

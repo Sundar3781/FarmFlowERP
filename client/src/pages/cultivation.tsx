@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,58 +17,104 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Sprout, Plus, MapPin, Calendar, TrendingUp, DollarSign } from "lucide-react";
+import { Sprout, Plus, MapPin, Calendar, TrendingUp, DollarSign, Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { Progress } from "@/components/ui/progress";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Plot, InsertPlot, CultivationCost } from "@shared/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertPlotSchema } from "@shared/schema";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 export default function CultivationPage() {
   const { t } = useLanguage();
-  const [selectedPlot, setSelectedPlot] = useState<string | null>("plot-1");
+  const { toast } = useToast();
+  const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
   const [addPlotDialogOpen, setAddPlotDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"individual" | "consolidated">("individual");
 
-  const { data: plots, isLoading } = useQuery({
+  // Queries
+  const { data: plots = [], isLoading: plotsLoading, error: plotsError } = useQuery<Plot[]>({
     queryKey: ["/api/plots"],
   });
 
-  const mockPlots = [
-    {
-      id: "plot-1",
-      name: "North Field A",
-      variety: "Grand Naine",
-      area: 2.5,
-      plantDensity: 1600,
-      plantingDate: "2024-06-15",
-      daysAfterPlanting: 185,
-      totalPlants: 4000,
-      totalCost: 926000,
-      costPerPlant: 231.5,
-      incurred: 606000,
-      pending: 320000,
-      location: "North Section",
-      status: "Active"
-    },
-    {
-      id: "plot-2",
-      name: "South Field B",
-      variety: "Robusta",
-      area: 1.8,
-      plantDensity: 1600,
-      plantingDate: "2024-08-01",
-      daysAfterPlanting: 138,
-      totalPlants: 2880,
-      totalCost: 667200,
-      costPerPlant: 231.67,
-      incurred: 387200,
-      pending: 280000,
-      location: "South Section",
-      status: "Active"
-    },
-  ];
+  const { data: cultivationCosts = [], isLoading: costsLoading } = useQuery<CultivationCost[]>({
+    queryKey: ["/api/cultivation-costs"],
+  });
 
-  const currentPlot = mockPlots.find(p => p.id === selectedPlot);
+  // Form for creating new plot
+  const form = useForm<InsertPlot>({
+    resolver: zodResolver(insertPlotSchema),
+    defaultValues: {
+      name: "",
+      location: "",
+      area: "0",
+      variety: "",
+      plantingDate: format(new Date(), "yyyy-MM-dd"),
+      plantDensity: 1600,
+      status: "Active",
+      notes: "",
+    },
+  });
+
+  // Mutation for creating plot
+  const createPlotMutation = useMutation({
+    mutationFn: async (data: InsertPlot) => {
+      const res = await apiRequest("POST", "/api/plots", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plots"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"], exact: false });
+      toast({
+        title: "Success",
+        description: "Plot created successfully",
+      });
+      setAddPlotDialogOpen(false);
+      form.reset();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create plot",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Set first plot as selected when plots load
+  useMemo(() => {
+    if (plots.length > 0 && !selectedPlot) {
+      setSelectedPlot(plots[0].id);
+    }
+  }, [plots, selectedPlot]);
+
+  // Calculate plot metrics
+  const plotsWithMetrics = useMemo(() => {
+    return plots.map(plot => {
+      const area = parseFloat(String(plot.area || 0));
+      const totalPlants = area * plot.plantDensity;
+      const daysAfterPlanting = differenceInDays(new Date(), new Date(plot.plantingDate));
+      
+      const plotCosts = cultivationCosts.filter(c => c.plotId === plot.id);
+      const totalCost = plotCosts.reduce((sum, c) => sum + parseFloat(String(c.amount || 0)), 0);
+      
+      return {
+        ...plot,
+        area,
+        totalPlants,
+        daysAfterPlanting,
+        totalCost,
+        costPerPlant: totalPlants > 0 ? totalCost / totalPlants : 0,
+      };
+    });
+  }, [plots, cultivationCosts]);
+
+  const currentPlot = plotsWithMetrics.find(p => p.id === selectedPlot);
 
   const calculateDayProgress = (days: number) => {
     const totalCycle = 310;
@@ -108,91 +154,181 @@ export default function CultivationPage() {
                   Register a new banana cultivation plot
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="plot-name">Plot Name</Label>
-                    <Input id="plot-name" placeholder="e.g., North Field A" data-testid="input-plot-name" />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit((data) => createPlotMutation.mutate(data))} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Plot Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., North Field A" data-testid="input-plot-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="variety"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Variety</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-variety">
+                                <SelectValue placeholder="Select variety" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Grand Naine">Grand Naine</SelectItem>
+                              <SelectItem value="Robusta">Robusta</SelectItem>
+                              <SelectItem value="Cavendish">Cavendish</SelectItem>
+                              <SelectItem value="Red Banana">Red Banana</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="variety">Variety</Label>
-                    <Select>
-                      <SelectTrigger id="variety" data-testid="select-variety">
-                        <SelectValue placeholder="Select variety" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="grand-naine">Grand Naine</SelectItem>
-                        <SelectItem value="robusta">Robusta</SelectItem>
-                        <SelectItem value="cavendish">Cavendish</SelectItem>
-                        <SelectItem value="red-banana">Red Banana</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="area"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Area (Hectares)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="2.5" data-testid="input-area" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="plantDensity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Plant Density (per hectare)</FormLabel>
+                          <FormControl>
+                            <Input type="number" data-testid="input-density" {...field} onChange={(e) => field.onChange(parseInt(e.target.value))} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="area">Area (Hectares)</Label>
-                    <Input id="area" type="number" step="0.1" placeholder="2.5" data-testid="input-area" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="plantingDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Planting Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" data-testid="input-planting-date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="location"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Location</FormLabel>
+                          <FormControl>
+                            <Input placeholder="North Section" data-testid="input-location" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="plant-density">Plant Density (per hectare)</Label>
-                    <Input id="plant-density" type="number" defaultValue="1600" data-testid="input-density" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="planting-date">Planting Date</Label>
-                    <Input id="planting-date" type="date" data-testid="input-planting-date" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" placeholder="North Section" data-testid="input-location" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes (Optional)</Label>
-                  <Textarea id="notes" placeholder="Additional details..." data-testid="textarea-notes" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setAddPlotDialogOpen(false)} data-testid="button-cancel">
-                  Cancel
-                </Button>
-                <Button onClick={() => setAddPlotDialogOpen(false)} data-testid="button-submit-plot">
-                  Add Plot
-                </Button>
-              </DialogFooter>
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Notes (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Additional details..." data-testid="textarea-notes" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setAddPlotDialogOpen(false)} data-testid="button-cancel" type="button">
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={createPlotMutation.isPending} data-testid="button-submit-plot">
+                      {createPlotMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Add Plot
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      {/* View Modes */}
-      {viewMode === "individual" && currentPlot && (
-        <div className="grid gap-6 lg:grid-cols-4">
-          {/* Plot Selection Sidebar */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-base">All Plots</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {mockPlots.map((plot) => (
-                <button
-                  key={plot.id}
-                  onClick={() => setSelectedPlot(plot.id)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-lg border transition-colors hover-elevate",
-                    selectedPlot === plot.id ? "border-primary bg-primary/5" : "border-border"
-                  )}
-                  data-testid={`button-select-plot-${plot.id}`}
-                >
-                  <p className="font-medium text-sm">{plot.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{plot.variety}</p>
-                  <p className="text-xs font-mono mt-1">{plot.totalPlants} plants</p>
-                </button>
-              ))}
-            </CardContent>
-          </Card>
+      {/* Loading State */}
+      {plotsLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : plotsError ? (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">
+              Failed to load plots. Please try again.
+            </div>
+          </CardContent>
+        </Card>
+      ) : plots.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center text-muted-foreground">
+              <p>No plots found</p>
+              <p className="text-sm mt-2">Click "New Plot" to add your first cultivation plot</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* View Modes */}
+          {viewMode === "individual" && currentPlot && (
+            <div className="grid gap-6 lg:grid-cols-4">
+              {/* Plot Selection Sidebar */}
+              <Card className="lg:col-span-1">
+                <CardHeader>
+                  <CardTitle className="text-base">All Plots</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {plotsWithMetrics.map((plot) => (
+                    <button
+                      key={plot.id}
+                      onClick={() => setSelectedPlot(plot.id)}
+                      className={cn(
+                        "w-full text-left p-3 rounded-lg border transition-colors hover-elevate",
+                        selectedPlot === plot.id ? "border-primary bg-primary/5" : "border-border"
+                      )}
+                      data-testid={`button-select-plot-${plot.id}`}
+                    >
+                      <p className="font-medium text-sm">{plot.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{plot.variety}</p>
+                      <p className="text-xs font-mono mt-1">{Math.round(plot.totalPlants)} plants</p>
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
 
           {/* Plot Details */}
           <div className="lg:col-span-3 space-y-4">
@@ -385,12 +521,12 @@ export default function CultivationPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mockPlots.map((plot) => (
+                {plotsWithMetrics.map((plot) => (
                   <div key={plot.id} className="p-4 rounded-lg border hover-elevate" data-testid={`card-plot-${plot.id}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-lg">{plot.name}</h3>
-                        <p className="text-sm text-muted-foreground">{plot.variety} • {plot.totalPlants} plants</p>
+                        <p className="text-sm text-muted-foreground">{plot.variety} • {Math.round(plot.totalPlants)} plants</p>
                       </div>
                       <Badge>{plot.status}</Badge>
                     </div>
@@ -401,15 +537,15 @@ export default function CultivationPage() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Per Plant</p>
-                        <p className="font-mono font-semibold">₹{plot.costPerPlant}</p>
+                        <p className="font-mono font-semibold">₹{plot.costPerPlant.toFixed(2)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Incurred</p>
-                        <p className="font-mono font-semibold">₹{plot.incurred.toLocaleString()}</p>
+                        <p className="text-muted-foreground">Days After Planting</p>
+                        <p className="font-mono font-semibold">{plot.daysAfterPlanting}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Pending</p>
-                        <p className="font-mono font-semibold">₹{plot.pending.toLocaleString()}</p>
+                        <p className="text-muted-foreground">Area</p>
+                        <p className="font-mono font-semibold">{plot.area} ha</p>
                       </div>
                     </div>
                   </div>
@@ -418,6 +554,8 @@ export default function CultivationPage() {
             </CardContent>
           </Card>
         </div>
+          )}
+        </>
       )}
     </div>
   );
