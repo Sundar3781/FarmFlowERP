@@ -43,6 +43,12 @@ import type {
   InsertPettyCash,
   AuditLog,
   InsertAuditLog,
+  Wage,
+  InsertWage,
+  AdminSetting,
+  InsertAdminSetting,
+  BiometricAttendance,
+  InsertBiometricAttendance,
 } from "@shared/schema";
 
 // ============================================================================
@@ -155,6 +161,22 @@ export interface IStorage {
   getAuditLogs(userId?: string, module?: string): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
+  // Wages
+  getWagesByUserId(userId: string, month?: string): Promise<Wage[]>;
+  getAllWages(month?: string): Promise<Wage[]>;
+  createWage(wage: InsertWage): Promise<Wage>;
+  updateWage(id: string, wage: Partial<InsertWage>): Promise<Wage | undefined>;
+
+  // Admin Settings
+  getAllAdminSettings(category?: string): Promise<AdminSetting[]>;
+  getAdminSetting(key: string): Promise<AdminSetting | undefined>;
+  createAdminSetting(setting: InsertAdminSetting): Promise<AdminSetting>;
+  updateAdminSetting(key: string, value: any): Promise<AdminSetting | undefined>;
+
+  // Biometric Attendance
+  getBiometricAttendance(attendanceId: string): Promise<BiometricAttendance | undefined>;
+  createBiometricAttendance(data: InsertBiometricAttendance): Promise<BiometricAttendance>;
+
   // Dashboard Stats
   getDashboardStats(): Promise<{
     totalPlots: number;
@@ -190,6 +212,9 @@ export class MemStorage implements IStorage {
   private journalLines: Map<string, JournalLine>;
   private pettyCash: Map<string, PettyCash>;
   private auditLogs: Map<string, AuditLog>;
+  private wages: Map<string, Wage>;
+  private adminSettings: Map<string, AdminSetting>;
+  private biometricAttendance: Map<string, BiometricAttendance>;
 
   constructor() {
     this.users = new Map();
@@ -213,6 +238,9 @@ export class MemStorage implements IStorage {
     this.journalLines = new Map();
     this.pettyCash = new Map();
     this.auditLogs = new Map();
+    this.wages = new Map();
+    this.adminSettings = new Map();
+    this.biometricAttendance = new Map();
 
     this.initializeSeedData();
   }
@@ -771,6 +799,81 @@ export class MemStorage implements IStorage {
     const log: AuditLog = { ...insertLog, id, timestamp: new Date() };
     this.auditLogs.set(id, log);
     return log;
+  }
+
+  // ========== WAGES ==========
+
+  async getWagesByUserId(userId: string, month?: string): Promise<Wage[]> {
+    const allWages = Array.from(this.wages.values()).filter(w => w.userId === userId);
+    if (month) {
+      return allWages.filter(w => w.month === month);
+    }
+    return allWages;
+  }
+
+  async getAllWages(month?: string): Promise<Wage[]> {
+    const allWages = Array.from(this.wages.values());
+    if (month) {
+      return allWages.filter(w => w.month === month);
+    }
+    return allWages;
+  }
+
+  async createWage(insertWage: InsertWage): Promise<Wage> {
+    const id = randomUUID();
+    const wage: Wage = { ...insertWage, id, createdAt: new Date() };
+    this.wages.set(id, wage);
+    return wage;
+  }
+
+  async updateWage(id: string, updates: Partial<InsertWage>): Promise<Wage | undefined> {
+    const wage = this.wages.get(id);
+    if (!wage) return undefined;
+    const updated: Wage = { ...wage, ...updates };
+    this.wages.set(id, updated);
+    return updated;
+  }
+
+  // ========== ADMIN SETTINGS ==========
+
+  async getAllAdminSettings(category?: string): Promise<AdminSetting[]> {
+    const allSettings = Array.from(this.adminSettings.values());
+    if (category) {
+      return allSettings.filter(s => s.category === category);
+    }
+    return allSettings;
+  }
+
+  async getAdminSetting(key: string): Promise<AdminSetting | undefined> {
+    return Array.from(this.adminSettings.values()).find(s => s.settingKey === key);
+  }
+
+  async createAdminSetting(insertSetting: InsertAdminSetting): Promise<AdminSetting> {
+    const id = randomUUID();
+    const setting: AdminSetting = { ...insertSetting, id, updatedAt: new Date() };
+    this.adminSettings.set(id, setting);
+    return setting;
+  }
+
+  async updateAdminSetting(key: string, value: any): Promise<AdminSetting | undefined> {
+    const setting = await this.getAdminSetting(key);
+    if (!setting) return undefined;
+    const updated: AdminSetting = { ...setting, settingValue: value, updatedAt: new Date() };
+    this.adminSettings.set(setting.id, updated);
+    return updated;
+  }
+
+  // ========== BIOMETRIC ATTENDANCE ==========
+
+  async getBiometricAttendance(attendanceId: string): Promise<BiometricAttendance | undefined> {
+    return Array.from(this.biometricAttendance.values()).find(b => b.attendanceId === attendanceId);
+  }
+
+  async createBiometricAttendance(insertData: InsertBiometricAttendance): Promise<BiometricAttendance> {
+    const id = randomUUID();
+    const data: BiometricAttendance = { ...insertData, id, createdAt: new Date() };
+    this.biometricAttendance.set(id, data);
+    return data;
   }
 
   // ========== DASHBOARD STATS ==========

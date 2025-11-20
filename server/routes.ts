@@ -25,6 +25,9 @@ import {
   insertJournalLineSchema,
   insertPettyCashSchema,
   insertAuditLogSchema,
+  insertWageSchema,
+  insertAdminSettingSchema,
+  insertBiometricAttendanceSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -921,6 +924,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to create audit log" });
+    }
+  });
+
+  // ============================================================================
+  // WAGES
+  // ============================================================================
+
+  app.get("/api/wages", async (req, res) => {
+    try {
+      const { userId, month } = req.query;
+      let wages;
+      if (userId) {
+        wages = await storage.getWagesByUserId(userId as string, month as string);
+      } else {
+        wages = await storage.getAllWages(month as string);
+      }
+      res.json(wages);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch wages" });
+    }
+  });
+
+  app.post("/api/wages", async (req, res) => {
+    try {
+      const wageData = insertWageSchema.parse(req.body);
+      const wage = await storage.createWage(wageData);
+      res.status(201).json(wage);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create wage entry" });
+    }
+  });
+
+  app.patch("/api/wages/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const wage = await storage.updateWage(id, updates);
+      if (!wage) {
+        return res.status(404).json({ error: "Wage entry not found" });
+      }
+      res.json(wage);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update wage entry" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN SETTINGS
+  // ============================================================================
+
+  app.get("/api/admin-settings", async (req, res) => {
+    try {
+      const { category } = req.query;
+      const settings = await storage.getAllAdminSettings(category as string);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch admin settings" });
+    }
+  });
+
+  app.get("/api/admin-settings/:key", async (req, res) => {
+    try {
+      const { key } = req.params;
+      const setting = await storage.getAdminSetting(key);
+      if (!setting) {
+        return res.status(404).json({ error: "Setting not found" });
+      }
+      res.json(setting);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.post("/api/admin-settings", async (req, res) => {
+    try {
+      const settingData = insertAdminSettingSchema.parse(req.body);
+      const setting = await storage.createAdminSetting(settingData);
+      res.status(201).json(setting);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create admin setting" });
+    }
+  });
+
+  app.patch("/api/admin-settings/:key", async (req, res) => {
+    try {
+      const { key } = req.params;
+      const { value } = req.body;
+      const setting = await storage.updateAdminSetting(key, value);
+      if (!setting) {
+        return res.status(404).json({ error: "Setting not found" });
+      }
+      res.json(setting);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  // ============================================================================
+  // BIOMETRIC ATTENDANCE
+  // ============================================================================
+
+  app.get("/api/biometric-attendance/:attendanceId", async (req, res) => {
+    try {
+      const { attendanceId } = req.params;
+      const data = await storage.getBiometricAttendance(attendanceId);
+      if (!data) {
+        return res.status(404).json({ error: "Biometric data not found" });
+      }
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch biometric data" });
+    }
+  });
+
+  app.post("/api/biometric-attendance", async (req, res) => {
+    try {
+      const bioData = insertBiometricAttendanceSchema.parse(req.body);
+      const data = await storage.createBiometricAttendance(bioData);
+      res.status(201).json(data);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create biometric data" });
     }
   });
 
