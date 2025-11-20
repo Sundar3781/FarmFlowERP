@@ -57,9 +57,9 @@ export default function FinancePage() {
     resolver: zodResolver(insertExpenseSchema.omit({ createdBy: true })),
     defaultValues: {
       date: format(new Date(), "yyyy-MM-dd"),
-      paymentMethod: "Cash",
-      category: "Fertilizer",
-      amount: "0",
+      paymentMethod: "",
+      category: "",
+      amount: "",
       description: "",
     },
   });
@@ -388,7 +388,18 @@ export default function FinancePage() {
                             <FormItem>
                               <FormLabel>Amount (₹)</FormLabel>
                               <FormControl>
-                                <Input type="number" step="0.01" placeholder="1500.00" {...field} data-testid="input-expense-amount" />
+                                <Input 
+                                  type="number" 
+                                  step="0.01" 
+                                  placeholder="1500.00" 
+                                  {...field} 
+                                  data-testid="input-expense-amount"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
