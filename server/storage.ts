@@ -840,4 +840,60 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Use DatabaseStorage for production
+import { DatabaseStorage } from "./db-storage";
+export const storage = new DatabaseStorage();
+
+// Seed database with demo users on startup
+async function seedDatabase() {
+  try {
+    // Check if users exist
+    const existingUser = await storage.getUserByUsername("admin");
+    if (existingUser) {
+      console.log("Database already seeded");
+      return;
+    }
+
+    // Create demo users
+    const demoUsers = [
+      {
+        username: "admin",
+        password: "admin",
+        fullName: "Admin User",
+        role: "Admin",
+        email: "admin@farm.com",
+        phone: null,
+        isActive: true,
+      },
+      {
+        username: "manager",
+        password: "manager",
+        fullName: "Farm Manager",
+        role: "Manager",
+        email: "manager@farm.com",
+        phone: null,
+        isActive: true,
+      },
+      {
+        username: "user",
+        password: "user",
+        fullName: "Farm Operator",
+        role: "Operator",
+        email: "user@farm.com",
+        phone: null,
+        isActive: true,
+      },
+    ];
+
+    for (const userData of demoUsers) {
+      await storage.createUser(userData);
+    }
+
+    console.log("Database seeded with demo users");
+  } catch (error) {
+    console.error("Error seeding database:", error);
+  }
+}
+
+// Seed on module load
+seedDatabase();

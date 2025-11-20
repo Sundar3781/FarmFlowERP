@@ -21,6 +21,7 @@ import { Sprout, Plus, MapPin, Calendar, TrendingUp, DollarSign } from "lucide-r
 import { useLanguage } from "@/lib/language-context";
 import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function CultivationPage() {
   const { t } = useLanguage();
