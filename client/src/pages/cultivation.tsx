@@ -200,7 +200,7 @@ export default function CultivationPage() {
                       name="area"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Area (Hectares)</FormLabel>
+                          <FormLabel>Area (Acres)</FormLabel>
                           <FormControl>
                             <Input type="number" step="0.1" placeholder="2.5" data-testid="input-area" {...field} />
                           </FormControl>
@@ -213,7 +213,7 @@ export default function CultivationPage() {
                       name="plantDensity"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Plant Density (per hectare)</FormLabel>
+                          <FormLabel>Plant Density (per acre)</FormLabel>
                           <FormControl>
                             <Input type="number" data-testid="input-density" {...field} onChange={(e) => field.onChange(parseInt(e.target.value))} />
                           </FormControl>
@@ -411,7 +411,7 @@ export default function CultivationPage() {
                   <CardContent className="grid gap-4 md:grid-cols-2">
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Area</p>
-                      <p className="text-lg font-semibold mt-1">{currentPlot.area} hectares</p>
+                      <p className="text-lg font-semibold mt-1">{currentPlot.area} acres</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Total Plants</p>
@@ -419,7 +419,7 @@ export default function CultivationPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Plant Density</p>
-                      <p className="text-lg font-semibold mt-1">{currentPlot.plantDensity} plants/hectare</p>
+                      <p className="text-lg font-semibold mt-1">{currentPlot.plantDensity} plants/acre</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Planting Date</p>
@@ -492,7 +492,7 @@ export default function CultivationPage() {
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Area</p>
                 <p className="text-3xl font-bold font-mono">
-                  {plotsWithMetrics.reduce((sum, p) => sum + p.area, 0)} ha
+                  {plotsWithMetrics.reduce((sum, p) => sum + p.area, 0)} acres
                 </p>
               </CardContent>
             </Card>
@@ -545,7 +545,7 @@ export default function CultivationPage() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Area</p>
-                        <p className="font-mono font-semibold">{plot.area} ha</p>
+                        <p className="font-mono font-semibold">{plot.area} acres</p>
                       </div>
                     </div>
                   </div>

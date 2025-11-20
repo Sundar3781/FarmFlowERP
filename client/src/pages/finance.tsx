@@ -30,16 +30,56 @@ import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Account } from "@shared/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import type { Account, Expense, InsertExpense } from "@shared/schema";
+import { insertExpenseSchema } from "@shared/schema";
 
 export default function FinancePage() {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [addJournalDialogOpen, setAddJournalDialogOpen] = useState(false);
   const [addPettyCashDialogOpen, setAddPettyCashDialogOpen] = useState(false);
+  const [addExpenseDialogOpen, setAddExpenseDialogOpen] = useState(false);
 
   const { data: accounts = [], isLoading: accountsLoading, error: accountsError } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
+  });
+
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
+    queryKey: ["/api/expenses"],
+  });
+
+  const expenseForm = useForm<InsertExpense>({
+    resolver: zodResolver(insertExpenseSchema),
+    defaultValues: {
+      date: format(new Date(), "yyyy-MM-dd"),
+      paymentMethod: "",
+      category: "",
+      amount: "",
+      description: "",
+    },
+  });
+
+  const createExpenseMutation = useMutation({
+    mutationFn: (data: InsertExpense) => apiRequest("/api/expenses", "POST", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({
+        title: "Success",
+        description: "Expense recorded successfully",
+      });
+      setAddExpenseDialogOpen(false);
+      expenseForm.reset();
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to record expense",
+        variant: "destructive",
+      });
+    },
   });
 
   const getAccountTypeColor = (type: string) => {
@@ -143,6 +183,7 @@ export default function FinancePage() {
         <TabsList>
           <TabsTrigger value="accounts" data-testid="tab-accounts">Chart of Accounts</TabsTrigger>
           <TabsTrigger value="journal" data-testid="tab-journal">Journal Entries</TabsTrigger>
+          <TabsTrigger value="expenses" data-testid="tab-expenses">Expenses</TabsTrigger>
           <TabsTrigger value="petty-cash" data-testid="tab-petty-cash">Petty Cash</TabsTrigger>
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
         </TabsList>
@@ -292,6 +333,177 @@ export default function FinancePage() {
                         No journal entries recorded yet
                       </TableCell>
                     </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="expenses" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Expenses Tracker</CardTitle>
+              <Dialog open={addExpenseDialogOpen} onOpenChange={setAddExpenseDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="button-add-expense">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Expense
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Record Expense</DialogTitle>
+                    <DialogDescription>
+                      Add a new expense transaction
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...expenseForm}>
+                    <form onSubmit={expenseForm.handleSubmit((data) => createExpenseMutation.mutate(data))} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={expenseForm.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Date</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} data-testid="input-expense-date" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={expenseForm.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Amount (₹)</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="1500.00" {...field} data-testid="input-expense-amount" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={expenseForm.control}
+                        name="paymentMethod"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Payment Method</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-payment-method">
+                                  <SelectValue placeholder="Select payment method" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Cash">Cash</SelectItem>
+                                <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                                <SelectItem value="Credit Card">Credit Card</SelectItem>
+                                <SelectItem value="Cheque">Cheque</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={expenseForm.control}
+                        name="category"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Category</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-expense-category">
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Seeds">Seeds</SelectItem>
+                                <SelectItem value="Fertilizer">Fertilizer</SelectItem>
+                                <SelectItem value="Pesticide">Pesticide</SelectItem>
+                                <SelectItem value="Labour">Labour</SelectItem>
+                                <SelectItem value="Fuel">Fuel</SelectItem>
+                                <SelectItem value="Equipment">Equipment</SelectItem>
+                                <SelectItem value="Maintenance">Maintenance</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={expenseForm.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="What was this expense for?" {...field} data-testid="textarea-expense-description" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setAddExpenseDialogOpen(false)} data-testid="button-cancel-expense">
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={createExpenseMutation.isPending} data-testid="button-submit-expense">
+                          {createExpenseMutation.isPending ? "Adding..." : "Add Expense"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead className="text-right">Amount (₹)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expensesLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          Loading expenses...
+                        </TableCell>
+                      </TableRow>
+                    ) : expenses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No expenses recorded yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      expenses.map((expense) => (
+                        <TableRow key={expense.id} data-testid={`row-expense-${expense.id}`}>
+                          <TableCell className="font-mono">{format(new Date(expense.date), "dd MMM yyyy")}</TableCell>
+                          <TableCell className="font-medium">{expense.description}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{expense.category}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{expense.paymentMethod}</TableCell>
+                          <TableCell className="text-right font-mono font-semibold text-orange-600 dark:text-orange-400">
+                            {Number(expense.amount).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
