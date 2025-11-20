@@ -30,7 +30,12 @@ import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Animal } from "@shared/schema";
+import type { Animal, MilkYield, InsertMilkYield } from "@shared/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertMilkYieldSchema } from "@shared/schema";
+import { z } from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 export default function LivestockPage() {
   const { t } = useLanguage();
@@ -41,6 +46,66 @@ export default function LivestockPage() {
 
   const { data: animals = [], isLoading: animalsLoading, error: animalsError } = useQuery<Animal[]>({
     queryKey: ["/api/animals"],
+  });
+
+  const { data: milkYields = [], isLoading: milkYieldsLoading, error: milkYieldsError } = useQuery<MilkYield[]>({
+    queryKey: ["/api/milk-yields"],
+  });
+
+  // Milk Yield form schema with validation
+  const milkYieldFormSchema = insertMilkYieldSchema.extend({
+    morningYield: z.string().optional().transform(val => val && val !== "" ? val : undefined),
+    eveningYield: z.string().optional().transform(val => val && val !== "" ? val : undefined),
+  });
+
+  const milkYieldForm = useForm<z.infer<typeof milkYieldFormSchema>>({
+    resolver: zodResolver(milkYieldFormSchema),
+    defaultValues: {
+      animalId: "",
+      date: format(new Date(), "yyyy-MM-dd"),
+      morningYield: undefined,
+      eveningYield: undefined,
+      totalYield: "0",
+      quality: "",
+    },
+  });
+
+  const createMilkYieldMutation = useMutation({
+    mutationFn: async (data: InsertMilkYield) => {
+      return await apiRequest("/api/milk-yields", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/milk-yields"], exact: false });
+      toast({
+        title: "Success",
+        description: "Milk yield recorded successfully",
+      });
+      milkYieldForm.reset();
+      setAddMilkYieldDialogOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to record milk yield",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleMilkYieldSubmit = milkYieldForm.handleSubmit((data) => {
+    const morning = parseFloat(data.morningYield || "0");
+    const evening = parseFloat(data.eveningYield || "0");
+    const total = (morning + evening).toFixed(2);
+
+    createMilkYieldMutation.mutate({
+      ...data,
+      morningYield: data.morningYield || undefined,
+      eveningYield: data.eveningYield || undefined,
+      totalYield: total,
+    } as InsertMilkYield);
   });
 
   const getStatusColor = (status: string) => {
@@ -62,13 +127,21 @@ export default function LivestockPage() {
     const milkProducers = animals.filter(a => a.type === "Cow" || a.type === "Goat").length;
     const totalValue = animals.reduce((sum, a) => sum + (Number(a.currentValue) || 0), 0);
     
+    // Calculate average milk yield from recent records (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentYields = milkYields.filter(y => new Date(y.date) >= sevenDaysAgo);
+    const avgMilkYield = recentYields.length > 0
+      ? recentYields.reduce((sum, y) => sum + Number(y.totalYield), 0) / recentYields.length
+      : 0;
+    
     return {
       totalAnimals,
       milkProducers,
-      avgMilkYield: 0, // Would need milk_yields data
+      avgMilkYield: Number(avgMilkYield.toFixed(1)),
       totalValue,
     };
-  }, [animals]);
+  }, [animals, milkYields]);
 
   return (
     <div className="p-6 space-y-6" data-testid="page-livestock">
@@ -327,60 +400,116 @@ export default function LivestockPage() {
                       Log daily milk production for an animal
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="milk-animal">Animal</Label>
-                        <Select>
-                          <SelectTrigger id="milk-animal" data-testid="select-milk-animal">
-                            <SelectValue placeholder="Select animal" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {mockAnimals.filter(a => a.avgMilkYield > 0).map((animal) => (
-                              <SelectItem key={animal.id} value={animal.id}>
-                                {animal.tagNumber} - {animal.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                  <Form {...milkYieldForm}>
+                    <form onSubmit={handleMilkYieldSubmit} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={milkYieldForm.control}
+                          name="animalId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Animal</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-milk-animal">
+                                    <SelectValue placeholder="Select animal" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {animals.filter(a => a.type === "Cow" || a.type === "Goat").map((animal) => (
+                                    <SelectItem key={animal.id} value={animal.id}>
+                                      {animal.tagNumber} - {animal.name || "Unnamed"}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={milkYieldForm.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Date</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} data-testid="input-milk-date" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="milk-date">Date</Label>
-                        <Input id="milk-date" type="date" defaultValue={format(new Date(), "yyyy-MM-dd")} data-testid="input-milk-date" />
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={milkYieldForm.control}
+                          name="morningYield"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Morning Yield (Liters)</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.1" placeholder="9.2" {...field} data-testid="input-morning-yield" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={milkYieldForm.control}
+                          name="eveningYield"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Evening Yield (Liters)</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.1" placeholder="9.3" {...field} data-testid="input-evening-yield" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="morning-yield">Morning Yield (Liters)</Label>
-                        <Input id="morning-yield" type="number" step="0.1" placeholder="9.2" data-testid="input-morning-yield" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="evening-yield">Evening Yield (Liters)</Label>
-                        <Input id="evening-yield" type="number" step="0.1" placeholder="9.3" data-testid="input-evening-yield" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="milk-quality">Quality</Label>
-                      <Select>
-                        <SelectTrigger id="milk-quality" data-testid="select-milk-quality">
-                          <SelectValue placeholder="Select quality" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="good">Good</SelectItem>
-                          <SelectItem value="average">Average</SelectItem>
-                          <SelectItem value="poor">Poor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setAddMilkYieldDialogOpen(false)} data-testid="button-cancel-milk">
-                      Cancel
-                    </Button>
-                    <Button onClick={() => setAddMilkYieldDialogOpen(false)} data-testid="button-submit-milk">
-                      Record Yield
-                    </Button>
-                  </DialogFooter>
+                      <FormField
+                        control={milkYieldForm.control}
+                        name="quality"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Quality</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-milk-quality">
+                                  <SelectValue placeholder="Select quality" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Good">Good</SelectItem>
+                                <SelectItem value="Average">Average</SelectItem>
+                                <SelectItem value="Poor">Poor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => setAddMilkYieldDialogOpen(false)} 
+                          data-testid="button-cancel-milk"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          type="submit" 
+                          disabled={createMilkYieldMutation.isPending} 
+                          data-testid="button-submit-milk"
+                        >
+                          {createMilkYieldMutation.isPending ? "Recording..." : "Record Yield"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
                 </DialogContent>
               </Dialog>
             </CardHeader>
@@ -398,23 +527,43 @@ export default function LivestockPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockMilkYields.map((record) => {
-                      const animal = mockAnimals.find(a => a.id === record.animalId);
-                      return (
-                        <TableRow key={record.id} data-testid={`row-milk-yield-${record.id}`}>
-                          <TableCell>{format(new Date(record.date), "PP")}</TableCell>
-                          <TableCell className="font-medium">
-                            {animal?.tagNumber} - {animal?.name}
-                          </TableCell>
-                          <TableCell className="font-mono">{record.morningYield}</TableCell>
-                          <TableCell className="font-mono">{record.eveningYield}</TableCell>
-                          <TableCell className="font-mono font-semibold">{record.totalYield}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{record.quality}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {milkYieldsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          Loading milk yield records...
+                        </TableCell>
+                      </TableRow>
+                    ) : milkYieldsError ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-destructive">
+                          Failed to load milk yield records. Please try refreshing the page.
+                        </TableCell>
+                      </TableRow>
+                    ) : milkYields.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No milk yield records yet. Click "Record Yield" to get started.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      milkYields.map((record) => {
+                        const animal = animals.find(a => a.id === record.animalId);
+                        return (
+                          <TableRow key={record.id} data-testid={`row-milk-yield-${record.id}`}>
+                            <TableCell className="font-mono">{format(new Date(record.date), "PP")}</TableCell>
+                            <TableCell className="font-medium">
+                              {animal ? `${animal.tagNumber} - ${animal.name || "Unnamed"}` : "Unknown"}
+                            </TableCell>
+                            <TableCell className="font-mono">{record.morningYield || "-"}</TableCell>
+                            <TableCell className="font-mono">{record.eveningYield || "-"}</TableCell>
+                            <TableCell className="font-mono font-semibold">{Number(record.totalYield).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{record.quality || "N/A"}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>
