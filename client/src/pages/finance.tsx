@@ -54,10 +54,10 @@ export default function FinancePage() {
   };
 
   const stats = useMemo(() => {
-    const totalAssets = accounts.filter(a => a.type === "Asset").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const totalRevenue = accounts.filter(a => a.type === "Revenue").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const totalExpenses = accounts.filter(a => a.type === "Expense").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalAssets = accounts.filter(a => a.accountType === "Asset").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalLiabilities = accounts.filter(a => a.accountType === "Liability").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalRevenue = accounts.filter(a => a.accountType === "Revenue").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalExpenses = accounts.filter(a => a.accountType === "Expense").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
     
     return {
       totalAssets,
@@ -183,14 +183,14 @@ export default function FinancePage() {
                     ) : (
                       accounts.map((account) => (
                         <TableRow key={account.id} data-testid={`row-account-${account.id}`}>
-                          <TableCell className="font-mono">{account.code}</TableCell>
-                          <TableCell className="font-medium">{account.name}</TableCell>
+                          <TableCell className="font-mono">{account.accountCode}</TableCell>
+                          <TableCell className="font-medium">{account.accountName}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={getAccountTypeColor(account.type)}>
-                              {account.type}
+                            <Badge variant="outline" className={getAccountTypeColor(account.accountType)}>
+                              {account.accountType}
                             </Badge>
                           </TableCell>
-                          <TableCell className={`text-right font-mono font-semibold ${getAccountTypeColor(account.type)}`}>
+                          <TableCell className={`text-right font-mono font-semibold ${getAccountTypeColor(account.accountType)}`}>
                             {Number(account.balance).toLocaleString()}
                           </TableCell>
                         </TableRow>
@@ -247,9 +247,9 @@ export default function FinancePage() {
                             <SelectValue placeholder="Debit Account" />
                           </SelectTrigger>
                           <SelectContent>
-                            {mockAccounts.map((acc) => (
+                            {accounts.map((acc) => (
                               <SelectItem key={acc.id} value={acc.id}>
-                                {acc.code} - {acc.name}
+                                {acc.accountCode} - {acc.accountName}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -287,19 +287,11 @@ export default function FinancePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockJournalEntries.map((entry) => (
-                      <TableRow key={entry.id} data-testid={`row-journal-${entry.id}`}>
-                        <TableCell>{format(new Date(entry.date), "PP")}</TableCell>
-                        <TableCell className="font-medium">{entry.description}</TableCell>
-                        <TableCell className="font-mono text-sm">{entry.reference}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {entry.debit > 0 ? entry.debit.toLocaleString() : "-"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {entry.credit > 0 ? entry.credit.toLocaleString() : "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No journal entries recorded yet
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
@@ -395,25 +387,11 @@ export default function FinancePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockPettyCash.map((entry) => (
-                      <TableRow key={entry.id} data-testid={`row-petty-cash-${entry.id}`}>
-                        <TableCell>{format(new Date(entry.date), "PP")}</TableCell>
-                        <TableCell className="font-medium">{entry.description}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{entry.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={entry.type === "Income" ? "default" : "secondary"}>
-                            {entry.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={`text-right font-mono font-semibold ${
-                          entry.type === "Income" ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400"
-                        }`}>
-                          {entry.type === "Income" ? "+" : "-"}{entry.amount.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No petty cash entries recorded yet
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>

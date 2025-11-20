@@ -364,7 +364,7 @@ export default function CultivationPage() {
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Total Cost</p>
                   <p className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">
-                    ₹{currentPlot.totalCost.toLocaleString()}
+                    ₹{currentPlot?.totalCost?.toLocaleString() || "0"}
                   </p>
                 </CardContent>
               </Card>
@@ -372,7 +372,7 @@ export default function CultivationPage() {
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Per Plant Cost</p>
                   <p className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
-                    ₹{currentPlot.costPerPlant}
+                    ₹{currentPlot?.costPerPlant?.toFixed(2) || "0"}
                   </p>
                 </CardContent>
               </Card>
@@ -380,7 +380,7 @@ export default function CultivationPage() {
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Incurred</p>
                   <p className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
-                    ₹{currentPlot.incurred.toLocaleString()}
+                    ₹{currentPlot?.totalCost?.toLocaleString() || "0"}
                   </p>
                 </CardContent>
               </Card>
@@ -388,7 +388,7 @@ export default function CultivationPage() {
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Pending</p>
                   <p className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-400">
-                    ₹{currentPlot.pending.toLocaleString()}
+                    ₹0
                   </p>
                 </CardContent>
               </Card>
@@ -485,14 +485,14 @@ export default function CultivationPage() {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Plots</p>
-                <p className="text-3xl font-bold font-mono">{mockPlots.length}</p>
+                <p className="text-3xl font-bold font-mono">{plotsWithMetrics.length}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Area</p>
                 <p className="text-3xl font-bold font-mono">
-                  {mockPlots.reduce((sum, p) => sum + p.area, 0)} ha
+                  {plotsWithMetrics.reduce((sum, p) => sum + p.area, 0)} ha
                 </p>
               </CardContent>
             </Card>
@@ -500,7 +500,7 @@ export default function CultivationPage() {
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Plants</p>
                 <p className="text-3xl font-bold font-mono">
-                  {mockPlots.reduce((sum, p) => sum + p.totalPlants, 0).toLocaleString()}
+                  {plotsWithMetrics.reduce((sum, p) => sum + p.totalPlants, 0).toLocaleString()}
                 </p>
               </CardContent>
             </Card>
@@ -508,7 +508,7 @@ export default function CultivationPage() {
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Investment</p>
                 <p className="text-3xl font-bold font-mono">
-                  ₹{mockPlots.reduce((sum, p) => sum + p.totalCost, 0).toLocaleString()}
+                  ₹{plotsWithMetrics.reduce((sum, p) => sum + p.totalCost, 0).toLocaleString()}
                 </p>
               </CardContent>
             </Card>

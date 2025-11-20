@@ -319,7 +319,7 @@ export default function EquipmentPage() {
                           <SelectValue placeholder="Select equipment" />
                         </SelectTrigger>
                         <SelectContent>
-                          {mockEquipment.map((eq) => (
+                          {equipment.map((eq) => (
                             <SelectItem key={eq.id} value={eq.id}>{eq.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -401,18 +401,11 @@ export default function EquipmentPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockFuelLogs.map((log) => {
-                      const equipment = mockEquipment.find(e => e.id === log.equipmentId);
-                      return (
-                        <TableRow key={log.id} data-testid={`row-fuel-log-${log.id}`}>
-                          <TableCell>{format(new Date(log.date), "PP")}</TableCell>
-                          <TableCell className="font-medium">{equipment?.name}</TableCell>
-                          <TableCell className="font-mono">{log.quantity}L</TableCell>
-                          <TableCell className="font-mono">₹{log.cost.toLocaleString()}</TableCell>
-                          <TableCell className="text-muted-foreground">{log.operator}</TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No fuel logs recorded yet
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>

@@ -391,31 +391,41 @@ export default function InventoryPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {mockInventory
-                  .filter(item => item.status === "critical" || item.status === "low")
-                  .map((item) => (
+                {inventory
+                  .filter(item => {
+                    const current = Number(item.currentStock);
+                    const reorder = Number(item.reorderLevel);
+                    const status = getStockStatus(current, reorder);
+                    return status === "critical" || status === "low";
+                  })
+                  .map((item) => {
+                    const current = Number(item.currentStock);
+                    const reorder = Number(item.reorderLevel);
+                    const status = getStockStatus(current, reorder);
+                    return (
                     <div key={item.id} className="flex items-center justify-between p-4 rounded-lg border hover-elevate">
                       <div className="flex-1">
                         <p className="font-medium">{item.name}</p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Current: <span className="font-mono">{item.currentStock} {item.unit}</span> • 
-                          Reorder: <span className="font-mono">{item.reorderLevel} {item.unit}</span>
+                          Current: <span className="font-mono">{current} {item.unit}</span> • 
+                          Reorder: <span className="font-mono">{reorder} {item.unit}</span>
                         </p>
                         <Progress 
-                          value={getStockPercentage(item.currentStock, item.reorderLevel)} 
+                          value={getStockPercentage(current, reorder)} 
                           className="w-48 h-2 mt-2"
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={getStatusColor(item.status)}>
-                          {item.status === "critical" ? "Critical" : "Low"}
+                        <Badge variant={getStatusColor(status)}>
+                          {status === "critical" ? "Critical" : "Low"}
                         </Badge>
                         <Button size="sm" data-testid={`button-reorder-${item.id}`}>
                           Reorder
                         </Button>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
               </div>
             </CardContent>
           </Card>
