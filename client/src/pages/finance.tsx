@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,38 +28,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { DollarSign, Plus, FileText, TrendingUp, TrendingDown, Download } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Account } from "@shared/schema";
 
 export default function FinancePage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [addJournalDialogOpen, setAddJournalDialogOpen] = useState(false);
   const [addPettyCashDialogOpen, setAddPettyCashDialogOpen] = useState(false);
 
-  const { data: accounts, isLoading } = useQuery({
+  const { data: accounts = [], isLoading: accountsLoading, error: accountsError } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
   });
-
-  const mockAccounts = [
-    { id: "1", code: "1000", name: "Cash", type: "Asset", balance: 125000 },
-    { id: "2", code: "1100", name: "Bank Account", type: "Asset", balance: 850000 },
-    { id: "3", code: "1200", name: "Inventory", type: "Asset", balance: 450000 },
-    { id: "4", code: "2000", name: "Accounts Payable", type: "Liability", balance: 75000 },
-    { id: "5", code: "3000", name: "Owner's Equity", type: "Equity", balance: 1000000 },
-    { id: "6", code: "4000", name: "Milk Sales Revenue", type: "Revenue", balance: 580000 },
-    { id: "7", code: "5000", name: "Fertilizer Expenses", type: "Expense", balance: 120000 },
-    { id: "8", code: "5100", name: "Labour Expenses", type: "Expense", balance: 250000 },
-  ];
-
-  const mockJournalEntries = [
-    { id: "1", date: "2024-11-17", description: "Milk sales - November Week 3", reference: "INV-2024-047", debit: 0, credit: 35000 },
-    { id: "2", date: "2024-11-16", description: "Fertilizer purchase", reference: "PO-2024-089", debit: 15000, credit: 0 },
-    { id: "3", date: "2024-11-15", description: "Labour payment - Weekly", reference: "PAY-2024-045", debit: 12500, credit: 0 },
-  ];
-
-  const mockPettyCash = [
-    { id: "1", date: "2024-11-17", description: "Office supplies", category: "Office", amount: 850, type: "Expense" },
-    { id: "2", date: "2024-11-16", description: "Worker transport", category: "Travel", amount: 1200, type: "Expense" },
-    { id: "3", date: "2024-11-15", description: "Fuel for generator", category: "Misc", amount: 2500, type: "Expense" },
-  ];
 
   const getAccountTypeColor = (type: string) => {
     switch (type) {
@@ -71,6 +52,20 @@ export default function FinancePage() {
       default: return "";
     }
   };
+
+  const stats = useMemo(() => {
+    const totalAssets = accounts.filter(a => a.type === "Asset").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalLiabilities = accounts.filter(a => a.type === "Liability").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalRevenue = accounts.filter(a => a.type === "Revenue").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    const totalExpenses = accounts.filter(a => a.type === "Expense").reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+    
+    return {
+      totalAssets,
+      totalLiabilities,
+      totalRevenue,
+      totalExpenses,
+    };
+  }, [accounts]);
 
   return (
     <div className="p-6 space-y-6" data-testid="page-finance">
@@ -100,7 +95,7 @@ export default function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              ₹{mockAccounts.filter(a => a.type === "Asset").reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+              {accountsLoading ? "-" : `₹${stats.totalAssets.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Current assets value</p>
           </CardContent>
@@ -112,7 +107,7 @@ export default function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              ₹{mockAccounts.filter(a => a.type === "Liability").reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+              {accountsLoading ? "-" : `₹${stats.totalLiabilities.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Outstanding liabilities</p>
           </CardContent>
@@ -124,7 +119,7 @@ export default function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-green-600 dark:text-green-400">
-              ₹{mockAccounts.filter(a => a.type === "Revenue").reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+              {accountsLoading ? "-" : `₹${stats.totalRevenue.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">November 2024</p>
           </CardContent>
@@ -136,7 +131,7 @@ export default function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
-              ₹{mockAccounts.filter(a => a.type === "Expense").reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+              {accountsLoading ? "-" : `₹${stats.totalExpenses.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">November 2024</p>
           </CardContent>
@@ -173,20 +168,34 @@ export default function FinancePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockAccounts.map((account) => (
-                      <TableRow key={account.id} data-testid={`row-account-${account.id}`}>
-                        <TableCell className="font-mono">{account.code}</TableCell>
-                        <TableCell className="font-medium">{account.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={getAccountTypeColor(account.type)}>
-                            {account.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={`text-right font-mono font-semibold ${getAccountTypeColor(account.type)}`}>
-                          {account.balance.toLocaleString()}
+                    {accountsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                          Loading accounts...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : accounts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                          No accounts created yet. Click "Add Account" to get started.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      accounts.map((account) => (
+                        <TableRow key={account.id} data-testid={`row-account-${account.id}`}>
+                          <TableCell className="font-mono">{account.code}</TableCell>
+                          <TableCell className="font-medium">{account.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={getAccountTypeColor(account.type)}>
+                              {account.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`text-right font-mono font-semibold ${getAccountTypeColor(account.type)}`}>
+                            {Number(account.balance).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>

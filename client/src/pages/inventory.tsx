@@ -239,25 +239,43 @@ export default function InventoryPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {inventoryError ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">{mockInventory.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Unique items tracked</p>
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">Failed to load inventory. Stats unavailable.</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
-              {lowStockCount}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Items need reordering</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">{inventoryLoading ? "-" : stats.totalItems}</div>
+              <p className="text-xs text-muted-foreground mt-1">Unique items tracked</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Critical Stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-destructive">
+                {inventoryLoading ? "-" : stats.criticalItems}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Urgent reorder needed</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
+                {inventoryLoading ? "-" : stats.lowStockItems}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Items need reordering</p>
           </CardContent>
         </Card>
         <Card>
@@ -266,21 +284,13 @@ export default function InventoryPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              ₹{mockInventory.reduce((sum, item) => sum + (item.currentStock * item.unitPrice), 0).toLocaleString()}
+              {inventoryLoading ? "-" : `₹${stats.totalValue.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Current inventory value</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">6</div>
-            <p className="text-xs text-muted-foreground mt-1">Item categories</p>
-          </CardContent>
-        </Card>
       </div>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="all" className="space-y-4">

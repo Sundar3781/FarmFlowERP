@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,86 +28,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Beef, Plus, Droplet, Heart, TrendingUp } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Animal } from "@shared/schema";
 
 export default function LivestockPage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [addAnimalDialogOpen, setAddAnimalDialogOpen] = useState(false);
   const [addMilkYieldDialogOpen, setAddMilkYieldDialogOpen] = useState(false);
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
 
-  const { data: animals, isLoading } = useQuery({
+  const { data: animals = [], isLoading: animalsLoading, error: animalsError } = useQuery<Animal[]>({
     queryKey: ["/api/animals"],
   });
-
-  const mockAnimals = [
-    {
-      id: "1",
-      tagNumber: "C-001",
-      name: "Lakshmi",
-      type: "Cow",
-      breed: "Jersey",
-      gender: "Female",
-      dateOfBirth: "2020-05-15",
-      status: "Active",
-      location: "Barn A",
-      avgMilkYield: 18.5,
-      purchaseCost: 65000,
-      currentValue: 85000,
-    },
-    {
-      id: "2",
-      tagNumber: "C-002",
-      name: "Nandi",
-      type: "Cow",
-      breed: "Holstein",
-      gender: "Female",
-      dateOfBirth: "2019-08-20",
-      status: "Active",
-      location: "Barn A",
-      avgMilkYield: 22.0,
-      purchaseCost: 75000,
-      currentValue: 95000,
-    },
-    {
-      id: "3",
-      tagNumber: "H-001",
-      name: "Raja",
-      type: "Horse",
-      breed: "Kathiawari",
-      gender: "Male",
-      dateOfBirth: "2018-03-10",
-      status: "Active",
-      location: "Stable",
-      avgMilkYield: 0,
-      purchaseCost: 120000,
-      currentValue: 150000,
-    },
-    {
-      id: "4",
-      tagNumber: "D-001",
-      name: "Bruno",
-      type: "Dog",
-      breed: "German Shepherd",
-      gender: "Male",
-      dateOfBirth: "2021-11-05",
-      status: "Active",
-      location: "Guard Post",
-      avgMilkYield: 0,
-      purchaseCost: 15000,
-      currentValue: 18000,
-    },
-  ];
-
-  const mockMilkYields = [
-    { id: "1", animalId: "1", date: "2024-11-17", morningYield: 9.2, eveningYield: 9.3, totalYield: 18.5, quality: "Good" },
-    { id: "2", animalId: "2", date: "2024-11-17", morningYield: 11.0, eveningYield: 11.0, totalYield: 22.0, quality: "Good" },
-    { id: "3", animalId: "1", date: "2024-11-16", morningYield: 9.0, eveningYield: 9.5, totalYield: 18.5, quality: "Good" },
-  ];
-
-  const getHealthStatus = (animalId: string) => {
-    // Simulated health status
-    return "good";
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -122,6 +56,19 @@ export default function LivestockPage() {
     const years = Math.floor((new Date().getTime() - new Date(dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365));
     return `${years} years`;
   };
+
+  const stats = useMemo(() => {
+    const totalAnimals = animals.length;
+    const milkProducers = animals.filter(a => a.type === "Cow" || a.type === "Goat").length;
+    const totalValue = animals.reduce((sum, a) => sum + (Number(a.currentValue) || 0), 0);
+    
+    return {
+      totalAnimals,
+      milkProducers,
+      avgMilkYield: 0, // Would need milk_yields data
+      totalValue,
+    };
+  }, [animals]);
 
   return (
     <div className="p-6 space-y-6" data-testid="page-livestock">
@@ -230,50 +177,58 @@ export default function LivestockPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {animalsError ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Animals</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">{mockAnimals.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Registered livestock</p>
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">Failed to load livestock. Stats unavailable.</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Milk Producing</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary">
-              {mockAnimals.filter(a => a.avgMilkYield > 0).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Cows/Buffaloes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Daily Milk Yield</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">
-              {mockAnimals.reduce((sum, a) => sum + a.avgMilkYield, 0).toFixed(1)}L
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Average per day</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">
-              ₹{mockAnimals.reduce((sum, a) => sum + a.currentValue, 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Current livestock value</p>
-          </CardContent>
-        </Card>
-      </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Animals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">{animalsLoading ? "-" : stats.totalAnimals}</div>
+              <p className="text-xs text-muted-foreground mt-1">Registered livestock</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Milk Producing</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-primary">
+                {animalsLoading ? "-" : stats.milkProducers}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Cows/Buffaloes</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Daily Milk Yield</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">
+                {animalsLoading ? "-" : `${stats.avgMilkYield.toFixed(1)}L`}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Average per day</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">
+                {animalsLoading ? "-" : `₹${stats.totalValue.toLocaleString()}`}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Current livestock value</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="registry" className="space-y-4">
@@ -306,33 +261,44 @@ export default function LivestockPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockAnimals.map((animal) => (
-                      <TableRow key={animal.id} data-testid={`row-animal-${animal.id}`}>
-                        <TableCell className="font-mono font-medium">{animal.tagNumber}</TableCell>
-                        <TableCell>{animal.name}</TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{animal.type}</p>
-                            <p className="text-xs text-muted-foreground">{animal.breed}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{animal.gender}</TableCell>
-                        <TableCell className="text-muted-foreground">{calculateAge(animal.dateOfBirth)}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusColor(animal.status)}>{animal.status}</Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{animal.location}</TableCell>
-                        <TableCell className="font-mono">
-                          {animal.avgMilkYield > 0 ? `${animal.avgMilkYield}L` : "-"}
-                        </TableCell>
-                        <TableCell>
-                          <div className={`h-2 w-2 rounded-full ${
-                            getHealthStatus(animal.id) === "good" ? "bg-green-500" :
-                            getHealthStatus(animal.id) === "fair" ? "bg-yellow-500" : "bg-red-500"
-                          }`} />
+                    {animalsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          Loading animals...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : animals.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          No animals registered yet. Click "Register Animal" to get started.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      animals.map((animal) => (
+                        <TableRow key={animal.id} data-testid={`row-animal-${animal.id}`}>
+                          <TableCell className="font-mono font-medium">{animal.tagNumber}</TableCell>
+                          <TableCell>{animal.name || "-"}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{animal.type}</p>
+                              <p className="text-xs text-muted-foreground">{animal.breed || "-"}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{animal.gender}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {animal.dateOfBirth ? calculateAge(animal.dateOfBirth) : "Unknown"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusColor(animal.status)}>{animal.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{animal.location || "-"}</TableCell>
+                          <TableCell className="font-mono">-</TableCell>
+                          <TableCell>
+                            <div className="h-2 w-2 rounded-full bg-green-500" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>

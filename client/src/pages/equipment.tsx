@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,73 +28,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Wrench, Plus, Calendar, Fuel, AlertCircle } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Equipment } from "@shared/schema";
 
 export default function EquipmentPage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [addEquipmentDialogOpen, setAddEquipmentDialogOpen] = useState(false);
   const [addMaintenanceDialogOpen, setAddMaintenanceDialogOpen] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
 
-  const { data: equipment, isLoading } = useQuery({
+  const { data: equipment = [], isLoading: equipmentLoading, error: equipmentError } = useQuery<Equipment[]>({
     queryKey: ["/api/equipment"],
   });
-
-  const mockEquipment = [
-    { 
-      id: "1", 
-      name: "Mahindra Tractor 575 DI", 
-      type: "Tractor",
-      registrationNumber: "TN-38-AB-1234",
-      status: "Operational",
-      lastService: "2024-10-15",
-      nextService: "2024-12-15",
-      purchaseDate: "2020-03-10",
-      purchaseCost: 750000,
-      location: "Main Barn"
-    },
-    { 
-      id: "2", 
-      name: "Knapsack Sprayer", 
-      type: "Sprayer",
-      registrationNumber: "-",
-      status: "Operational",
-      lastService: "2024-11-01",
-      nextService: "2025-02-01",
-      purchaseDate: "2023-06-20",
-      purchaseCost: 12000,
-      location: "Tool Shed"
-    },
-    { 
-      id: "3", 
-      name: "Submersible Pump 5HP", 
-      type: "Pump",
-      registrationNumber: "-",
-      status: "UnderMaintenance",
-      lastService: "2024-11-10",
-      nextService: "2025-01-10",
-      purchaseDate: "2021-08-15",
-      purchaseCost: 45000,
-      location: "Well #2"
-    },
-    { 
-      id: "4", 
-      name: "Pickup Truck", 
-      type: "Vehicle",
-      registrationNumber: "TN-38-CD-5678",
-      status: "Operational",
-      lastService: "2024-10-20",
-      nextService: "2024-12-20",
-      purchaseDate: "2019-11-05",
-      purchaseCost: 850000,
-      location: "Parking Area"
-    },
-  ];
-
-  const mockFuelLogs = [
-    { id: "1", equipmentId: "1", date: "2024-11-17", quantity: 45, cost: 4275, operator: "Rajesh Kumar" },
-    { id: "2", equipmentId: "4", date: "2024-11-16", quantity: 30, cost: 2850, operator: "Arun Patel" },
-    { id: "3", equipmentId: "1", date: "2024-11-15", quantity: 50, cost: 4750, operator: "Suresh Babu" },
-  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -105,10 +52,25 @@ export default function EquipmentPage() {
     }
   };
 
-  const isServiceDue = (nextService: string) => {
+  const isServiceDue = (nextService: string | null) => {
+    if (!nextService) return false;
     const daysUntilService = Math.ceil((new Date(nextService).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     return daysUntilService <= 7;
   };
+
+  const stats = useMemo(() => {
+    const totalEquipment = equipment.length;
+    const operational = equipment.filter(e => e.status === "Operational").length;
+    const underMaintenance = equipment.filter(e => e.status === "UnderMaintenance").length;
+    const serviceDue = equipment.filter(e => e.nextServiceDate && isServiceDue(e.nextServiceDate)).length;
+    
+    return {
+      totalEquipment,
+      operational,
+      underMaintenance,
+      serviceDue,
+    };
+  }, [equipment]);
 
   return (
     <div className="p-6 space-y-6" data-testid="page-equipment">
@@ -191,50 +153,58 @@ export default function EquipmentPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {equipmentError ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Equipment</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">{mockEquipment.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Registered items</p>
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">Failed to load equipment. Stats unavailable.</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Operational</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary">
-              {mockEquipment.filter(e => e.status === "Operational").length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Working equipment</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Under Maintenance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
-              {mockEquipment.filter(e => e.status === "UnderMaintenance").length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Being serviced</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Service Due</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-red-600 dark:text-red-400">
-              {mockEquipment.filter(e => isServiceDue(e.nextService)).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Within 7 days</p>
-          </CardContent>
-        </Card>
-      </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Equipment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">{equipmentLoading ? "-" : stats.totalEquipment}</div>
+              <p className="text-xs text-muted-foreground mt-1">Registered items</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Operational</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-primary">
+                {equipmentLoading ? "-" : stats.operational}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Working equipment</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Under Maintenance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
+                {equipmentLoading ? "-" : stats.underMaintenance}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Being serviced</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Service Due</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-destructive">
+                {equipmentLoading ? "-" : stats.serviceDue}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Within 7 days</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="equipment" className="space-y-4">
@@ -265,37 +235,57 @@ export default function EquipmentPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockEquipment.map((item) => (
-                      <TableRow key={item.id} data-testid={`row-equipment-${item.id}`}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.type}</Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{item.registrationNumber}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusColor(item.status)}>
-                            {item.status === "UnderMaintenance" ? "Under Maintenance" : item.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{format(new Date(item.lastService), "PP")}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className={isServiceDue(item.nextService) ? "text-red-600 dark:text-red-400 font-medium" : ""}>
-                              {format(new Date(item.nextService), "PP")}
-                            </span>
-                            {isServiceDue(item.nextService) && (
-                              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{item.location}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant="outline" data-testid={`button-maintenance-${item.id}`}>
-                            Log Maintenance
-                          </Button>
+                    {equipmentLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          Loading equipment...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : equipment.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No equipment registered yet. Click "Add Equipment" to get started.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      equipment.map((item) => (
+                        <TableRow key={item.id} data-testid={`row-equipment-${item.id}`}>
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.type}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{item.registrationNumber || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusColor(item.status)}>
+                              {item.status === "UnderMaintenance" ? "Under Maintenance" : item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.lastServiceDate ? format(new Date(item.lastServiceDate), "PP") : "Never"}
+                          </TableCell>
+                          <TableCell>
+                            {item.nextServiceDate ? (
+                              <div className="flex items-center gap-2">
+                                <span className={isServiceDue(item.nextServiceDate) ? "text-destructive font-medium" : ""}>
+                                  {format(new Date(item.nextServiceDate), "PP")}
+                                </span>
+                                {isServiceDue(item.nextServiceDate) && (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">Not scheduled</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{item.location || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="outline" data-testid={`button-maintenance-${item.id}`}>
+                              Log Maintenance
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
