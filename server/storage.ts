@@ -844,7 +844,7 @@ export class MemStorage implements IStorage {
 import { DatabaseStorage } from "./db-storage";
 export const storage = new DatabaseStorage();
 
-// Seed database with demo users on startup
+// Seed database with demo users and sample data on startup
 async function seedDatabase() {
   try {
     // Check if users exist
@@ -875,21 +875,108 @@ async function seedDatabase() {
         isActive: true,
       },
       {
-        username: "user",
-        password: "user",
-        fullName: "Farm Operator",
+        username: "rajesh",
+        password: "password",
+        fullName: "Rajesh Kumar",
+        role: "Supervisor",
+        email: "rajesh@farm.com",
+        phone: "+91 98765 43210",
+        isActive: true,
+      },
+      {
+        username: "priya",
+        password: "password",
+        fullName: "Priya Sharma",
         role: "Operator",
-        email: "user@farm.com",
-        phone: null,
+        email: "priya@farm.com",
+        phone: "+91 98765 43211",
+        isActive: true,
+      },
+      {
+        username: "arun",
+        password: "password",
+        fullName: "Arun Patel",
+        role: "Operator",
+        email: "arun@farm.com",
+        phone: "+91 98765 43212",
+        isActive: true,
+      },
+      {
+        username: "meena",
+        password: "password",
+        fullName: "Meena Devi",
+        role: "Operator",
+        email: "meena@farm.com",
+        phone: "+91 98765 43213",
+        isActive: true,
+      },
+      {
+        username: "suresh",
+        password: "password",
+        fullName: "Suresh Babu",
+        role: "Operator",
+        email: "suresh@farm.com",
+        phone: "+91 98765 43214",
         isActive: true,
       },
     ];
 
+    const users = [];
     for (const userData of demoUsers) {
-      await storage.createUser(userData);
+      const user = await storage.createUser(userData);
+      users.push(user);
     }
 
-    console.log("Database seeded with demo users");
+    // Create attendance records for today
+    const today = format(new Date(), "yyyy-MM-dd");
+    const attendanceData = [
+      {
+        userId: users[2].id,
+        date: today,
+        status: "Present" as const,
+        checkIn: "08:45:00",
+        checkOut: "17:30:00",
+        workHours: 8.75,
+      },
+      {
+        userId: users[3].id,
+        date: today,
+        status: "Present" as const,
+        checkIn: "09:00:00",
+        checkOut: "17:45:00",
+        workHours: 8.75,
+      },
+      {
+        userId: users[4].id,
+        date: today,
+        status: "Late" as const,
+        checkIn: "09:30:00",
+        checkOut: null,
+        workHours: null,
+      },
+      {
+        userId: users[5].id,
+        date: today,
+        status: "Absent" as const,
+        checkIn: null,
+        checkOut: null,
+        workHours: 0,
+      },
+      {
+        userId: users[6].id,
+        date: today,
+        status: "Present" as const,
+        checkIn: "08:30:00",
+        checkOut: "17:15:00",
+        workHours: 8.75,
+      },
+    ];
+
+    for (const attendance of attendanceData) {
+      await storage.createAttendance(attendance);
+    }
+
+    console.log("Database seeded with demo users and attendance data");
   } catch (error) {
     console.error("Error seeding database:", error);
   }

@@ -47,7 +47,37 @@ export const getQueryFn: <T>(options: {
       headers["x-user-id"] = user.id;
     }
 
-    const res = await fetch(queryKey.join("/") as string, {
+    // Build URL from queryKey, handling objects as query params
+    const pathSegments: string[] = [];
+    const params: string[] = [];
+    
+    for (const segment of queryKey) {
+      if (typeof segment === "string") {
+        pathSegments.push(segment);
+      } else if (typeof segment === "number" || typeof segment === "boolean") {
+        // Include primitive values in the path
+        pathSegments.push(String(segment));
+      } else if (typeof segment === "object" && segment !== null) {
+        // Convert object to query parameters
+        for (const [key, value] of Object.entries(segment)) {
+          if (value !== undefined && value !== null) {
+            params.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+          }
+        }
+      }
+    }
+    
+    // Join path segments and ensure proper leading slash
+    let url = pathSegments.join("/");
+    if (!url.startsWith("/")) {
+      url = "/" + url;
+    }
+    
+    if (params.length > 0) {
+      url += "?" + params.join("&");
+    }
+
+    const res = await fetch(url, {
       credentials: "include",
       headers,
     });

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,28 +25,145 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClipboardCheck, Camera, Calendar as CalendarIcon, Download, UserPlus, Search } from "lucide-react";
+import { ClipboardCheck, Camera, Calendar as CalendarIcon, Download, UserPlus, Search, Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { User, Attendance } from "@shared/schema";
 
 export default function AttendancePage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [biometricDialogOpen, setBiometricDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
-  const { data: attendanceRecords, isLoading } = useQuery({
-    queryKey: ["/api/attendance", format(selectedDate, "yyyy-MM-dd")],
+  const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+  const { data: users, isLoading: usersLoading, error: usersError } = useQuery<User[]>({
+    queryKey: ["/api/users"],
   });
 
-  const mockEmployees = [
-    { id: "1", name: "Rajesh Kumar", role: "Supervisor", status: "Present", checkIn: "08:45", checkOut: "17:30", hours: "8.75" },
-    { id: "2", name: "Priya Sharma", role: "Operator", status: "Present", checkIn: "09:00", checkOut: "17:45", hours: "8.75" },
-    { id: "3", name: "Arun Patel", role: "Worker", status: "Late", checkIn: "09:30", checkOut: "-", hours: "-" },
-    { id: "4", name: "Meena Devi", role: "Worker", status: "Absent", checkIn: "-", checkOut: "-", hours: "0" },
-    { id: "5", name: "Suresh Babu", role: "Operator", status: "Present", checkIn: "08:30", checkOut: "17:15", hours: "8.75" },
-  ];
+  const { data: attendanceRecords = [], isLoading: attendanceLoading, error: attendanceError } = useQuery<Attendance[]>({
+    queryKey: ["/api/attendance", { date: dateStr }],
+    enabled: !!dateStr,
+  });
+
+  const createAttendanceMutation = useMutation({
+    mutationFn: async (data: { userId: string; status: string }) => {
+      const now = new Date();
+      const res = await apiRequest("POST", "/api/attendance", {
+        userId: data.userId,
+        date: dateStr,
+        status: data.status,
+        checkIn: data.status !== "Absent" ? format(now, "HH:mm:ss") : null,
+        checkOut: null,
+        workHours: null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"], exact: false });
+      toast({
+        title: "Success",
+        description: "Attendance recorded successfully",
+      });
+      setBiometricDialogOpen(false);
+      setSelectedUserId("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to record attendance",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCheckoutMutation = useMutation({
+    mutationFn: async (attendanceId: string) => {
+      const now = new Date();
+      const attendance = attendanceRecords.find(a => a.id === attendanceId);
+      if (!attendance?.checkIn) {
+        throw new Error("No check-in time found");
+      }
+
+      const checkInTime = new Date(`${dateStr}T${attendance.checkIn}`);
+      const checkOutTime = now;
+      const hours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+
+      const res = await apiRequest("PATCH", `/api/attendance/${attendanceId}`, {
+        checkOut: format(now, "HH:mm:ss"),
+        workHours: Math.round(hours * 100) / 100,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"], exact: false });
+      toast({
+        title: "Success",
+        description: "Check-out recorded successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to record check-out",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const employeeUsers = useMemo(() => {
+    return users?.filter(u => u.role !== "Admin") || [];
+  }, [users]);
+
+  const attendanceWithUsers = useMemo(() => {
+    if (!users || !attendanceRecords) return [];
+    const allRecords = attendanceRecords.map(attendance => {
+      const user = users.find(u => u.id === attendance.userId);
+      return {
+        ...attendance,
+        userName: user?.fullName || "Unknown",
+        userRole: user?.role || "Unknown",
+      };
+    });
+
+    if (!searchQuery.trim()) return allRecords;
+
+    const query = searchQuery.toLowerCase();
+    return allRecords.filter(record => 
+      record.userName.toLowerCase().includes(query) ||
+      record.userRole.toLowerCase().includes(query)
+    );
+  }, [users, attendanceRecords, searchQuery]);
+
+  const stats = useMemo(() => {
+    const total = employeeUsers.length;
+    const present = attendanceRecords.filter(a => a.status === "Present").length;
+    const late = attendanceRecords.filter(a => a.status === "Late").length;
+    
+    const uniqueUserIds = new Set(attendanceRecords.map(a => a.userId));
+    const recordedEmployees = uniqueUserIds.size;
+    const absent = total - recordedEmployees;
+    
+    const totalWorkHours = attendanceRecords.reduce((sum, a) => sum + (a.workHours || 0), 0);
+    const workingCount = attendanceRecords.filter(a => a.workHours && a.workHours > 0).length;
+    const avgHours = workingCount > 0 ? totalWorkHours / workingCount : 0;
+
+    return {
+      total,
+      present: present + late,
+      absent: Math.max(0, absent),
+      avgHours: Math.round(avgHours * 100) / 100,
+      attendanceRate: total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : 0,
+    };
+  }, [employeeUsers, attendanceRecords]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -59,10 +176,26 @@ export default function AttendancePage() {
   };
 
   const handleBiometricCapture = () => {
-    // Simulate biometric capture
-    setTimeout(() => {
-      setBiometricDialogOpen(false);
-    }, 1500);
+    if (!selectedUserId) {
+      toast({
+        title: "Error",
+        description: "Please select an employee",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const existingRecord = attendanceRecords.find(a => a.userId === selectedUserId);
+    if (existingRecord) {
+      toast({
+        title: "Error",
+        description: "Attendance already recorded for this employee today",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createAttendanceMutation.mutate({ userId: selectedUserId, status: "Present" });
   };
 
   return (
@@ -81,26 +214,59 @@ export default function AttendancePage() {
             <DialogTrigger asChild>
               <Button data-testid="button-biometric-capture">
                 <Camera className="h-4 w-4 mr-2" />
-                Biometric Capture
+                Check-In
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Biometric Attendance</DialogTitle>
+                <DialogTitle>Record Attendance</DialogTitle>
                 <DialogDescription>
-                  Place your finger on the scanner
+                  Select employee and record check-in
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                  <div className="h-32 w-32 rounded-full bg-primary/10 flex items-center justify-center animate-pulse">
-                    <Camera className="h-16 w-16 text-primary" />
+                {usersError ? (
+                  <div className="text-sm text-destructive p-4 bg-destructive/10 rounded-md">
+                    Failed to load employee list. Please try again.
                   </div>
-                  <p className="text-sm text-muted-foreground">Scanning fingerprint...</p>
-                </div>
-                <Button className="w-full" onClick={handleBiometricCapture} data-testid="button-confirm-capture">
-                  Confirm Attendance
-                </Button>
+                ) : usersLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="employee-select">Employee</Label>
+                      <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                        <SelectTrigger id="employee-select" data-testid="select-employee">
+                          <SelectValue placeholder="Select employee..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employeeUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.fullName} ({user.role})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button 
+                      className="w-full" 
+                      onClick={handleBiometricCapture} 
+                      disabled={createAttendanceMutation.isPending || !selectedUserId}
+                      data-testid="button-confirm-capture"
+                    >
+                      {createAttendanceMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Recording...
+                        </>
+                      ) : (
+                        "Confirm Check-In"
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </DialogContent>
           </Dialog>
@@ -112,44 +278,62 @@ export default function AttendancePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">45</div>
-            <p className="text-xs text-muted-foreground mt-1">Active workers</p>
+      {attendanceError ? (
+        <Card className="col-span-4">
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">
+              Failed to load attendance data. Stats unavailable.
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Present Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary">42</div>
-            <p className="text-xs text-muted-foreground mt-1">93.3% attendance</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Absent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-destructive">3</div>
-            <p className="text-xs text-muted-foreground mt-1">6.7% absent rate</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Work Hours</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">8.5</div>
-            <p className="text-xs text-muted-foreground mt-1">Hours per day</p>
-          </CardContent>
-        </Card>
-      </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">{usersLoading ? "-" : stats.total}</div>
+              <p className="text-xs text-muted-foreground mt-1">Active workers</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Present Today</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-primary">
+                {attendanceLoading ? "-" : stats.present}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{stats.attendanceRate}% attendance</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Absent</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-destructive">
+                {attendanceLoading ? "-" : stats.absent}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats.total > 0 ? `${Math.round((stats.absent / stats.total) * 1000) / 10}%` : "0%"} absent rate
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Avg Work Hours</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono">
+                {attendanceLoading ? "-" : stats.avgHours}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Hours per day</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="daily" className="space-y-4">
@@ -197,36 +381,72 @@ export default function AttendancePage() {
                   </div>
                 </div>
 
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Employee Name</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Check In</TableHead>
-                        <TableHead>Check Out</TableHead>
-                        <TableHead>Hours</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockEmployees.map((emp) => (
-                        <TableRow key={emp.id} data-testid={`row-employee-${emp.id}`}>
-                          <TableCell className="font-medium">{emp.name}</TableCell>
-                          <TableCell className="text-muted-foreground">{emp.role}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusColor(emp.status)}>
-                              {emp.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono">{emp.checkIn}</TableCell>
-                          <TableCell className="font-mono">{emp.checkOut}</TableCell>
-                          <TableCell className="font-mono font-semibold">{emp.hours}</TableCell>
+                {attendanceError ? (
+                  <div className="text-center py-12">
+                    <div className="text-destructive mb-2">Failed to load attendance records</div>
+                    <p className="text-sm text-muted-foreground">Please try again or contact support</p>
+                  </div>
+                ) : attendanceLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : attendanceWithUsers.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No attendance records for this date</p>
+                    <p className="text-sm mt-2">Click "Check-In" to record attendance</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Employee Name</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Check In</TableHead>
+                          <TableHead>Check Out</TableHead>
+                          <TableHead>Hours</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {attendanceWithUsers.map((record) => (
+                          <TableRow key={record.id} data-testid={`row-employee-${record.userId}`}>
+                            <TableCell className="font-medium">{record.userName}</TableCell>
+                            <TableCell className="text-muted-foreground">{record.userRole}</TableCell>
+                            <TableCell>
+                              <Badge variant={getStatusColor(record.status)}>
+                                {record.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              {record.checkIn ? record.checkIn.substring(0, 5) : "-"}
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              {record.checkOut ? record.checkOut.substring(0, 5) : "-"}
+                            </TableCell>
+                            <TableCell className="font-mono font-semibold">
+                              {record.workHours?.toFixed(2) || "-"}
+                            </TableCell>
+                            <TableCell>
+                              {record.checkIn && !record.checkOut && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateCheckoutMutation.mutate(record.id)}
+                                  disabled={updateCheckoutMutation.isPending}
+                                  data-testid={`button-checkout-${record.userId}`}
+                                >
+                                  Check-Out
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
